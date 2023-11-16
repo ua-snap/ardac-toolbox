@@ -4,6 +4,7 @@ import pandas as pd
 import geopandas as gpd
 import shapely
 from zipfile import ZipFile
+from lxml import etree as ET
 
 
 valid_areas = [
@@ -240,3 +241,49 @@ def unzip(zip_fp, base_fp):
                 zip_ref.extract(info, dest_dir)
 
     return base_fp
+
+
+def parse_meta_xml_str(meta_xml_str):
+    """Parse the DescribeCoverage request to get the XML and restructure the block called "Encoding" to a dict.
+
+    Arguments:
+        meta_xml_str (str): string representation of the byte XML response from the WCS DescribeCoverage request
+
+    Returns:
+        dim_encodings (dict): lookup table to match data axes or parameters to integer encodings, e.g., '2': 'GFDL-CM3'
+    """
+    xml_bytes = bytes(bytearray(meta_xml_str, encoding="utf-8"))
+    meta_tree = ET.XML(xml_bytes)
+    encoding_el = meta_tree.findall(".//Encoding")[0]
+
+    dim_encodings = {}
+    for dim in encoding_el.iter():
+        if dim.text.startswith("{") and dim.text.endswith("}"):
+            encoding_di = eval(dim.text)
+            for key, value in encoding_di.items():
+                if isinstance(value, dict):
+                    dim_encodings[key] = {int(k): v for k, v in value.items()}
+                else:
+                    dim_encodings[dim.tag] = {int(k): v for k, v in encoding_di.items()}
+
+    return dim_encodings
+
+
+def assign_coordinate_labels_to_dataset(decode_di, ds):
+    """Assign the coordinate labels for a dataset from a dictionary of values
+
+    Args:
+        decode_di (dict): a nested dictionary with keys for the coordinate dimension names and associated integer value-coordinate label mappings
+        ds (xarray.Dataset): a dataset accessed via Rasdaman which has the integer encodings for the coordinates
+
+    Returns:
+        ds (xarra.Dataset): the input dataset with coordinate labels applied
+    """
+    for k in decode_di.keys():
+        try:
+            new_coords = [int(decode_di[k][i]) for i in ds[k].values]
+        except ValueError:
+            new_coords = [decode_di[k][i] for i in ds[k].values]
+        ds = ds.assign({k: new_coords})
+
+    return ds

@@ -34,8 +34,18 @@ has_zonal_stats = {
 
 
 def get_point_gdf_by_category(category_string):
-    # if category is 'communities' simply return a gdf using lat/lon ... output in 4326 so the lat/lons can be used in API querys
-    # if category is not community, compute the centroid of the polygons returned ... output in 4326 so the lat/lons can be used in API querys
+    """Get a GeoDataFrame of points using boundary data service endpoint categories found here: https://earthmaps.io/boundary/. 
+    If category is 'communities' this function will return a GeoDataFrame using the lat/lon coordinates of the community. 
+    If category is not 'communities', this function will return a GeoDataFrame using the centroid of the polygons returned.
+    GeoDataFrames are returned in WGS84 (EPSG:4326) so their coordinates can be used to query other datasets using the SNAP Data API. 
+
+    Args:
+        category_string (str): the boundary data service endpoint category. Must be one of: "communities", "hucs", "protected_areas", 
+        "corporations", "climate_divisions", "fire_zones", "ethnolinguistic_regions", "boroughs", "census_areas", "game_management_units", or "first_nations".
+
+    Returns:
+        gdf_output (GeoDataFrame): a GeoDataFrame of point data in WGS84.
+    """
     if category_string not in valid_areas:
         message = "Bad category string. Choose one of the following: "
         return print(message, valid_areas)
@@ -114,6 +124,21 @@ def get_point_gdf_by_category(category_string):
 
 
 def get_area_gdf_by_category(area_category_string, crs_code=None):
+    """Get a GeoDataFrame of polygons using boundary data service endpoint categories found here: https://earthmaps.io/boundary/. 
+    If category is 'communities' this function will return an error: there are no polygons available for communities. 
+    If category is not 'communities', this function will return a GeoDataFrame of the polygons returned.
+    GeoDataFrames are returned in WGS84 (EPSG:4326) by default.
+    Specifying a "crs_code" argument will return a GeoDataFrame in the CRS indicated by the integer EPSG code provided in the argument.
+    EPSG codes are not checked for validity - errors originating from a bad CRS code will originate from the GeoPandas `GeoDataFrame.to_crs()' function.
+
+    Args:
+        area_category_string (str): the boundary data service endpoint category. Must be one of: "hucs", "protected_areas", 
+        "corporations", "climate_divisions", "fire_zones", "ethnolinguistic_regions", "boroughs", "census_areas", "game_management_units", or "first_nations".
+        crs_code (int, optional): EPSG code for the resulting GeoDataFrame; default is 4326 (WGS84)
+
+    Returns:
+        gdf_output (GeoDataFrame): a GeoDataFrame of polygon data.
+    """
     if (crs_code != None) & (type(crs_code) != int):
         return print("CRS code must be EPSG as integer.")
 
@@ -165,6 +190,17 @@ def get_area_gdf_by_category(area_category_string, crs_code=None):
 
 
 def get_data_for_gdf_polygons(polygon_gdf, dataset_name_string):
+    """Get a DataFrame of service endpoint data for each polygon in the input GeoDataFrame.
+    This function essentially provides the CSV output of zonal statistics for a given endpoint, which is converted to a pandas DataFrame. 
+    Zonal statistics are not available for all datasets. 
+    
+    Args:
+        polygon_gdf (GeoDataFrame): a GeoDataFrame of polygons with an "id" and "name" attribute. The "id" values must match valid IDs for the dataset.
+        dataset_name_string (str): the service endpoint category. Must be one of: "indicators", "beetles", "flammability", "veg_type", "temperature", "precipitation", "temperature_and_precipitation".
+
+    Returns:
+        df_output (DataFrame): a DataFrame of endpoint data. Data for all valid polygon IDs is concatenated into this single DataFrame. 
+    """
     if dataset_name_string not in list(has_zonal_stats.keys()):
         message = "Bad dataset name string. Choose one of the following: "
         return print(message, list(has_zonal_stats.keys()))
@@ -277,7 +313,7 @@ def assign_coordinate_labels_to_dataset(decode_di, ds):
         ds (xarray.Dataset): a dataset accessed via Rasdaman which has the integer encodings for the coordinates
 
     Returns:
-        ds (xarra.Dataset): the input dataset with coordinate labels applied
+        ds (xarray.Dataset): the input dataset with coordinate labels applied
     """
     for k in decode_di.keys():
         try:
